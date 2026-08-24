@@ -20,6 +20,9 @@
 #              - 'Hello World' (custom), command line 'make custom-vsim-run'
 #              - 'Floating Point example' (custom_fp), command line 'make custom-fp-vsim-run'
 #              - 'Interrupt example' (interrupt), command line 'make interrupt-vsim-run'
+#              - iSim analyse/elaborate, command line 'make isim-analyze' /
+#                'make isim-analyze-fp' / 'make isim-analyze-tb' /
+#                'make isim-elab' -- see isim.mk
 
 MAKE			= make
 
@@ -66,6 +69,10 @@ RTLSRC_VOPT_TB_TOP	:= $(addsuffix _vopt, $(RTLSRC_VLOG_TB_TOP))
 # riscv toolchain install path
 RISCV                    ?= ~/.riscv
 RISCV_EXE_PREFIX         = $(RISCV)/bin/riscv32-unknown-elf-
+
+# iSim (True North Silicon) target family -- see isim.mk. Included after
+# DESIGN_RTL_DIR/CV_CORE_MANIFEST/RTLSRC_TB* above, which it depends on.
+-include isim.mk
 
 # assume vsim if no target chosen
 .DEFAULT_GOAL := custom-vsim-run

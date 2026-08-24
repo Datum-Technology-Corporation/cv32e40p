@@ -1,0 +1,76 @@
+# ----------------------------------------------------------------------
+# iSim (True North Silicon, https://tn-si.com) -- added as a native
+# simulator target beside the vsim-* family the main Makefile already
+# defines, the same place this Makefile already reserves per tool (its
+# own variable prefix, its own target family). No separate vlib/vopt
+# step: iSim's own work library covers create+analyse+elaborate in one
+# binary, so this block is shorter than the ModelSim one above by
+# design, not by omission -- and no "-run" target is offered here,
+# because no target in this pile has ever gotten a full core-v-verif
+# style firmware run working against iSim (see the isim.mk sibling in
+# the Datum-Technology-Corporation/core-v-verif fork's mk/uvmt/ for
+# where that frontier actually is). Offering one here that has not been
+# proven working would be exactly the silent-wrong-by-omission shape
+# this project's own iSim CLAUDE.md rules refuse.
+#
+# iSim's `-f` command-file reader does not expand `${VAR}` tokens the
+# way vsim's `-f` does -- a real, filed iSim CLI gap (True North
+# Silicon github#... TODO once filed), not a cv32e40p quirk. So
+# ISIM_MANIFEST/ISIM_FPU_MANIFEST translate cv32e40p_manifest.flist's
+# and cv32e40p_fpu_manifest.flist's own ${DESIGN_RTL_DIR} tokens to the
+# literal value the SAME env var already carries above, the one
+# substitution vsim gets for free and iSim does not, yet.
+# ----------------------------------------------------------------------
+ISIM_VLOG		?= isim-vlog
+ISIM_ELAB		?= isim-elab
+ISIM_WORK		= isim_work
+ISIM_MANIFEST		= .isim_cv32e40p_manifest.f
+ISIM_FPU_MANIFEST	= .isim_cv32e40p_fpu_manifest.f
+ISIM_TOP		= cv32e40p_top
+
+$(ISIM_MANIFEST): $(CV_CORE_MANIFEST)
+	sed 's|$${DESIGN_RTL_DIR}|$(DESIGN_RTL_DIR)|g' $(CV_CORE_MANIFEST) > $(ISIM_MANIFEST)
+
+$(ISIM_FPU_MANIFEST): $(RTLSRC_HOME)/cv32e40p_fpu_manifest.flist
+	sed 's|$${DESIGN_RTL_DIR}|$(DESIGN_RTL_DIR)|g' $(RTLSRC_HOME)/cv32e40p_fpu_manifest.flist > $(ISIM_FPU_MANIFEST)
+
+# Every isim-analyze* target starts from a CLEAN library. iSim's analyser
+# refuses to re-declare a package that is already in the destination
+# library (LRM-correct -- a second `isim-vlog` into the same -lib without
+# clearing it first is not "add more files", it is "redeclare what's
+# already there"), so a target that reused a stale $(ISIM_WORK) between
+# runs would fail the SECOND time for a reason that has nothing to do
+# with the design -- worse, only when a developer's own invocation order
+# happened to leave one behind. Each target is therefore idempotent and
+# order-independent on its own, at the cost of not being incremental.
+ISIM_FRESH_WORK = rm -rf $(ISIM_WORK)
+
+# Analyse the core RTL alone, upstream's own manifest, no testbench.
+.PHONY: isim-analyze
+isim-analyze: $(ISIM_MANIFEST)
+	$(ISIM_FRESH_WORK)
+	$(ISIM_VLOG) -work $(ISIM_WORK) -lib work -f $(ISIM_MANIFEST)
+
+# Analyse the FPU manifest variant (fpnew + the FP-enabled core).
+.PHONY: isim-analyze-fp
+isim-analyze-fp: $(ISIM_FPU_MANIFEST)
+	$(ISIM_FRESH_WORK)
+	$(ISIM_VLOG) -work $(ISIM_WORK) -lib work -f $(ISIM_FPU_MANIFEST)
+
+# Analyse this example testbench's own sources on top of the core RTL --
+# RTLSRC_TB_PKG/RTLSRC_TB are the main Makefile's own variables above,
+# so a testbench file upstream adds is picked up here too.
+.PHONY: isim-analyze-tb
+isim-analyze-tb: $(ISIM_MANIFEST)
+	$(ISIM_FRESH_WORK)
+	$(ISIM_VLOG) -work $(ISIM_WORK) -lib work -f $(ISIM_MANIFEST) \
+		$(RTLSRC_TB_PKG) $(RTLSRC_TB)
+
+# Elaborate the assembled core as its own top -- no testbench.
+.PHONY: isim-elab
+isim-elab: isim-analyze
+	$(ISIM_ELAB) -work $(ISIM_WORK) -lib work -top $(ISIM_TOP) -sir
+
+.PHONY: isim-clean
+isim-clean:
+	rm -rf $(ISIM_WORK) $(ISIM_MANIFEST) $(ISIM_FPU_MANIFEST)
