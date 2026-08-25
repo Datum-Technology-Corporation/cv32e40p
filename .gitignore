@@ -26,3 +26,9 @@ cadence_conformal
 synopsys_formality
 questa_autocheck
 reports
+
+# iSim (True North Silicon) scratch artifacts -- see example_tb/core/isim.mk
+/example_tb/core/isim_work/
+/example_tb/core/.isim_cv32e40p_manifest.f
+/example_tb/core/.isim_cv32e40p_fpu_manifest.f
+/example_tb/core/default.profraw

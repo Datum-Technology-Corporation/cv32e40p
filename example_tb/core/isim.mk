@@ -27,6 +27,19 @@ ISIM_WORK		= isim_work
 ISIM_MANIFEST		= .isim_cv32e40p_manifest.f
 ISIM_FPU_MANIFEST	= .isim_cv32e40p_fpu_manifest.f
 ISIM_TOP		= cv32e40p_top
+ISIM_LOG_DIR		= isim_logs
+
+# Every iSim tool shares one `-l <file>` flag (src/cli/isim_cli.c's
+# isim_cli_report_opt, "one spelling for ten commands" -- present in
+# every tool's own arg parsing even though it is missing from `-help`'s
+# printed usage text today). It tees stdout AND stderr at the file
+# descriptor level (fork+pipe, src/lib/isim_diag.c's isim_diag_log_open)
+# straight into the named file while still printing live to the console
+# -- so the command's own exit status reaches `make` untouched, no shell
+# pipe, no pipefail needed.
+
+$(ISIM_LOG_DIR):
+	mkdir -p $(ISIM_LOG_DIR)
 
 $(ISIM_MANIFEST): $(CV_CORE_MANIFEST)
 	sed 's|$${DESIGN_RTL_DIR}|$(DESIGN_RTL_DIR)|g' $(CV_CORE_MANIFEST) > $(ISIM_MANIFEST)
@@ -47,30 +60,34 @@ ISIM_FRESH_WORK = rm -rf $(ISIM_WORK)
 
 # Analyse the core RTL alone, upstream's own manifest, no testbench.
 .PHONY: isim-analyze
-isim-analyze: $(ISIM_MANIFEST)
+isim-analyze: $(ISIM_MANIFEST) | $(ISIM_LOG_DIR)
 	$(ISIM_FRESH_WORK)
-	$(ISIM_VLOG) -work $(ISIM_WORK) -lib work -f $(ISIM_MANIFEST)
+	$(ISIM_VLOG) -l $(ISIM_LOG_DIR)/isim-analyze.log \
+		-work $(ISIM_WORK) -lib work -f $(ISIM_MANIFEST)
 
 # Analyse the FPU manifest variant (fpnew + the FP-enabled core).
 .PHONY: isim-analyze-fp
-isim-analyze-fp: $(ISIM_FPU_MANIFEST)
+isim-analyze-fp: $(ISIM_FPU_MANIFEST) | $(ISIM_LOG_DIR)
 	$(ISIM_FRESH_WORK)
-	$(ISIM_VLOG) -work $(ISIM_WORK) -lib work -f $(ISIM_FPU_MANIFEST)
+	$(ISIM_VLOG) -l $(ISIM_LOG_DIR)/isim-analyze-fp.log \
+		-work $(ISIM_WORK) -lib work -f $(ISIM_FPU_MANIFEST)
 
 # Analyse this example testbench's own sources on top of the core RTL --
 # RTLSRC_TB_PKG/RTLSRC_TB are the main Makefile's own variables above,
 # so a testbench file upstream adds is picked up here too.
 .PHONY: isim-analyze-tb
-isim-analyze-tb: $(ISIM_MANIFEST)
+isim-analyze-tb: $(ISIM_MANIFEST) | $(ISIM_LOG_DIR)
 	$(ISIM_FRESH_WORK)
-	$(ISIM_VLOG) -work $(ISIM_WORK) -lib work -f $(ISIM_MANIFEST) \
+	$(ISIM_VLOG) -l $(ISIM_LOG_DIR)/isim-analyze-tb.log \
+		-work $(ISIM_WORK) -lib work -f $(ISIM_MANIFEST) \
 		$(RTLSRC_TB_PKG) $(RTLSRC_TB)
 
 # Elaborate the assembled core as its own top -- no testbench.
 .PHONY: isim-elab
-isim-elab: isim-analyze
-	$(ISIM_ELAB) -work $(ISIM_WORK) -lib work -top $(ISIM_TOP) -sir
+isim-elab: isim-analyze | $(ISIM_LOG_DIR)
+	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab.log \
+		-work $(ISIM_WORK) -lib work -top $(ISIM_TOP) -sir
 
 .PHONY: isim-clean
 isim-clean:
-	rm -rf $(ISIM_WORK) $(ISIM_MANIFEST) $(ISIM_FPU_MANIFEST)
+	rm -rf $(ISIM_WORK) $(ISIM_MANIFEST) $(ISIM_FPU_MANIFEST) $(ISIM_LOG_DIR)
