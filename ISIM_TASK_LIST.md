@@ -62,11 +62,18 @@ regression pinning this exact FIFO shape
 
 ---
 
-## 2. FPU testbench (`isim-custom-fp-run`) — elaborates end-to-end, run stalls on a multi-driven struct-member port-write cluster
+## 2. FPU testbench (`isim-custom-fp-run`) — GREEN, cycle-exact with dsim
 
-**Status: OPEN — elaboration ladder FIXED (five iSim fixes, 2026-08-26);
-runtime blocked on a named structural-lowering gap, filed for the next
-session**
+**Status: FIXED — SW-515400 (iSim, 2026-08-26). `EXIT SUCCESS` at time
+89040, identical to dsim 2026. github#958 CLOSED: the filed
+mdrv/concatz/part_pv lowering refusals were COLLATERAL of one
+elaboration bug — an element select of a packed-array-of-ENUM parameter
+(`FmtUnitTypes[fmt]`) was read as a flat BIT select of the flattened
+value, so `== DISABLED` held for every format and
+fpnew_opgroup_block's generate chain tied off ALL formats including the
+active one, double-driving the merged format's handshake nets. Graded
+upstream by `integ_cv32e40p_fpu_run` (+ the elab-only twin) and the
+`isim_sv_27_05_enum_array_param_elem_generate_cond` sv_lrm entry.**
 
 **Elaboration ladder, all landed on iSim `main`** (each dsim-verified,
 each with an `sv_lrm`/`integration` regression): SW-514900 (stored `.v`
