@@ -264,8 +264,13 @@ custom-fp-vsim-run-gui: ALL_VSIM_FLAGS += "+firmware=custom_fp/main.hex"
 custom-fp-vsim-run-gui: vsim-run-gui-fp
 
 # compile and run interrupt
+# -Wno-error=int-conversion: GCC >= 14 hard-errors on interrupt.c's own
+# int-literal-as-pointer writew()/readw() calls (historically a warning,
+# already silenced by -w, which does not downgrade errors); the program
+# text is upstream's, unchanged.
 interrupt/interrupt.elf: interrupt/interrupt.c
 	$(RISCV_EXE_PREFIX)gcc -march=rv32imc_zicsr -o $@ -w -Os -g -nostdlib \
+		-Wno-error=int-conversion \
 		${CUSTOM_GCC_FLAGS} \
 		-T custom/link.ld  \
 		-static \
