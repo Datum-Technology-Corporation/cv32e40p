@@ -25,6 +25,20 @@ _start:
 /* initialize stack pointer */
 	la sp, _sp
 
+#if defined(__riscv_flen)
+/* Enable the FPU state before any F instruction executes: the current
+ * CV32E40P RTL implements mstatus.FS (reset value Off), under which every
+ * floating-point instruction traps as illegal -- this crt0 predates that
+ * RTL change (same stale-example_tb class as the COREV_PULP parameter
+ * rename).  FS=01 (Initial) is the standard enable; the hardware upgrades
+ * it to Dirty on the first FP write.  Guarded by __riscv_flen so only a
+ * program actually compiled with the F extension executes the write --
+ * non-FP builds (hello_world, interrupt) assemble exactly as before. */
+	li t0, (1 << 13)
+	csrs mstatus, t0
+	csrr t1, mstatus	/* serialize: FS visible before 1st F insn */
+#endif
+
 /* set vector table address and vectored mode */
 	la a0, __vector_start
         ori a0, a0, 0x1

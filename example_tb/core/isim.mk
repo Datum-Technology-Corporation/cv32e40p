@@ -85,6 +85,21 @@ isim-analyze-tb: $(ISIM_MANIFEST) | $(ISIM_LOG_DIR)
 		-work $(ISIM_WORK) -lib work -f $(ISIM_MANIFEST) \
 		$(RTLSRC_TB_PKG) $(RTLSRC_TB)
 
+# The FPU testbench variant: the FPU manifest (vendored fpnew + the
+# FP-enabled core, incl. rtl/cv32e40p_fp_wrapper.sv) plus the SAME
+# filtered TB source set the non-FP target uses -- RTLSRC_TB's own
+# filter-out of the TB-local cv32e40p_fp_wrapper.sv copy is load-bearing
+# here: the manifest already provides that module, and analysing both
+# copies is a duplicate-definition error (measured, dsim [DupModuleDefn]).
+# This is the VENDORED-fpnew flow (cv32e40p_fpu_manifest.flist), not the
+# older clone-fpnew flow .build-rtl-fp above uses.
+.PHONY: isim-analyze-tb-fp
+isim-analyze-tb-fp: $(ISIM_FPU_MANIFEST) | $(ISIM_LOG_DIR)
+	$(ISIM_FRESH_WORK)
+	$(ISIM_VLOG) -l $(ISIM_LOG_DIR)/isim-analyze-tb-fp.log \
+		-work $(ISIM_WORK) -lib work -f $(ISIM_FPU_MANIFEST) \
+		$(RTLSRC_TB_PKG) $(RTLSRC_TB)
+
 # Elaborate the assembled core as its own top -- no testbench. Useful on
 # its own (isolates a core-only elaboration failure from a testbench-side
 # one) but produces no image that can run: tb_top, not cv32e40p_top, is
@@ -127,6 +142,29 @@ isim-run: isim-elab-tb | $(ISIM_LOG_DIR)
 isim-custom-run: custom/hello_world.hex
 isim-custom-run: ISIM_FIRMWARE = custom/hello_world.hex
 isim-custom-run: isim-run
+
+# Run the interrupt test -- the iSim analogue of interrupt-vsim-run.
+.PHONY: isim-interrupt-run
+isim-interrupt-run: interrupt/interrupt.hex
+isim-interrupt-run: ISIM_FIRMWARE = interrupt/interrupt.hex
+isim-interrupt-run: ISIM_MAXCYCLES = 1000000
+isim-interrupt-run: isim-run
+
+# The FP testbench image: FPU manifest + FPU=1 on tb_top itself
+# (-defparam rooted at -top, the same top-level override vsim spells
+# -GFPU=1).
+.PHONY: isim-elab-tb-fp
+isim-elab-tb-fp: isim-analyze-tb-fp | $(ISIM_LOG_DIR)
+	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab-tb-fp.log \
+		-work $(ISIM_WORK) -lib work -top tb_top -defparam tb_top.FPU=1 -sir
+
+# Run the FP matmul test -- the iSim analogue of custom-fp-vsim-run.
+# Depends on the FP elab, not the plain one: the image must carry fpnew.
+.PHONY: isim-custom-fp-run
+isim-custom-fp-run: custom_fp/main.hex isim-elab-tb-fp | $(ISIM_LOG_DIR)
+	$(ISIM) -l $(ISIM_LOG_DIR)/isim-custom-fp-run.log \
+		-image $(ISIM_WORK)/a.out.so \
+		+firmware=custom_fp/main.hex +maxcycles=2000000 $(ISIM_RUN_FLAGS)
 
 .PHONY: isim-clean
 isim-clean:

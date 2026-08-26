@@ -239,8 +239,18 @@ custom-vsim-run-gui: vsim-run-gui
 # This is an example for running a floating-point matrix multiplication in the testbench
 # We link with our custom crt0.s and syscalls.c against newlib so that we can
 # use the c standard library
+# -Wno-error=int-conversion: same GCC >= 14 promotion the interrupt rule
+# documents; main.c's own rnd_stall_reg int-literal assignment, text unchanged.
+# -mabi=ilp32 (was ilp32f): the pinned toolchain ships a single soft-float-ABI
+# multilib, so ilp32f objects cannot link against its libgcc/libc.  The ISA
+# stays rv32imfc -- the compiler still emits real F-extension instructions
+# (flw/fmul.s/fmadd.s...) for every float op, which is what exercises the
+# core's FPU; only the CALLING CONVENTION (float args in x-regs, not f-regs)
+# changes, invisible to the self-contained program.  Verified by objdump:
+# the built ELF contains F-extension opcodes.
 custom_fp/main.elf: custom_fp/matmulNxN.c custom_fp/main.c
-	$(RISCV_EXE_PREFIX)gcc -march=rv32imfc_zicsr -mabi=ilp32f -o $@ -w -g -nostdlib \
+	$(RISCV_EXE_PREFIX)gcc -march=rv32imfc_zicsr -mabi=ilp32 -o $@ -w -g -nostdlib \
+		-Wno-error=int-conversion \
 		$(CUSTOM_GCC_FLAGS) \
 		-T custom/link.ld  \
 		-static \

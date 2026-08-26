@@ -62,6 +62,46 @@ regression pinning this exact FIFO shape
 
 ---
 
+## 2. FPU testbench (`isim-custom-fp-run`) — elaborates end-to-end, run stalls on a multi-driven struct-member port-write cluster
+
+**Status: OPEN — elaboration ladder FIXED (five iSim fixes, 2026-08-26);
+runtime blocked on a named structural-lowering gap, filed for the next
+session**
+
+**Elaboration ladder, all landed on iSim `main`** (each dsim-verified,
+each with an `sv_lrm`/`integration` regression): SW-514900 (stored `.v`
+bodies reparsed as SV2012 at library load — the pa_fdsu `:/ ` mislex
+recurrence), SW-515000 (struct-param member element select,
+`Implementation.PipeRegs[opgrp]`), SW-515100 (const function reading its
+own local struct member, `super_format`), SW-515200 (runtime-prefix
+partial packed selects + `'{default:}` in ternary arms), SW-515300
+(enum-element select typing + pattern-to-element binding).  With these,
+`make isim-elab-tb-fp` analyses, elaborates, compiles and links the full
+FPU image (vendored fpnew, `-defparam tb_top.FPU=1`), and
+`make isim-custom-fp-run` RUNS it.
+
+**Remaining wall (runtime)**: the run reaches the 2M-cycle limit with no
+program output.  `rejected-loud=33` in SIR lowering, all one cluster —
+`fpnew_opgroup_block.sv:76-77/202`: module output ports driving DISJOINT
+STRUCT MEMBERS of one packed-array element
+(`.result_o(fmt_outputs[FMT].result)`, `.status_o(...)`, ...), which
+elaborates to a >64-bit multi-driven net with part-write drivers.  Three
+named refusals: `net.mdrv` (no resolver synthesized), `lpm.concatz`
+(>64-bit multi-driven output), `lpm.part_pv` (non-part-write driver mate).
+The driven net never updates, so the FP handshake never completes.  This
+is real structural-lowering work in iSim (tgt_sir.cc:4135/7358/13118),
+not a testbench issue.
+
+**Testbench-side fixes committed here** (all toolchain/stale-glue class,
+program text untouched; dsim runs the result to `EXIT SUCCESS` at time
+89040): `crt0.S` enables `mstatus.FS` under `__riscv_flen` (the current
+RTL implements FS, the 2019 crt0 predates it — without it every F
+instruction traps); `custom_fp` builds with `-mabi=ilp32` (single-
+multilib toolchain; ISA stays rv32imfc, F instructions verified present
+by objdump) and `-Wno-error=int-conversion` (GCC>=14).
+
+---
+
 ## Closed items (fixed in iSim, removed from active tracking)
 
 - **DPI-C export unsupported formal types** (was item 1, github#639):
