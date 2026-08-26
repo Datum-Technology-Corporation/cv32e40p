@@ -150,6 +150,24 @@ isim-interrupt-run: ISIM_FIRMWARE = interrupt/interrupt.hex
 isim-interrupt-run: ISIM_MAXCYCLES = 1000000
 isim-interrupt-run: isim-run
 
+# The XPULP testbench image: the plain manifest with the core's PULP
+# extensions enabled (tb_top.PULP_XPULP=1 -> COREV_PULP=1 on the core, the
+# vsim -g PULP_XPULP=1 analogue).  The hwlp firmware needs the PULP gcc
+# 7.1 fork (RISCV=/tools/pulp-riscv-gcc) -- see the hwlp_test rule in the
+# main Makefile.
+.PHONY: isim-elab-tb-pulp
+isim-elab-tb-pulp: isim-analyze-tb | $(ISIM_LOG_DIR)
+	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab-tb-pulp.log \
+		-work $(ISIM_WORK) -lib work -top tb_top \
+		-defparam tb_top.PULP_XPULP=1 -sir
+
+# Run the hardware-loop test -- the iSim analogue of hwlp-vsim-run.
+.PHONY: isim-hwlp-run
+isim-hwlp-run: hwlp_test/hwlp_test.hex isim-elab-tb-pulp | $(ISIM_LOG_DIR)
+	$(ISIM) -l $(ISIM_LOG_DIR)/isim-hwlp-run.log \
+		-image $(ISIM_WORK)/a.out.so \
+		+firmware=hwlp_test/hwlp_test.hex +maxcycles=200000 $(ISIM_RUN_FLAGS)
+
 # The FP testbench image: FPU manifest + FPU=1 on tb_top itself
 # (-defparam rooted at -top, the same top-level override vsim spells
 # -GFPU=1).

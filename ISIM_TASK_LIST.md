@@ -109,6 +109,26 @@ by objdump) and `-Wno-error=int-conversion` (GCC>=14).
 
 ---
 
+## 3. hwlp_test — toolchain UNBLOCKED; upstream firmware broken on BOTH simulators
+
+**Status: ADJUDICATED (2026-08-26) — not an iSim gap.**  The PULP
+toolchain is installed and proven (`/tools/pulp-riscv-gcc`, GCC 7.1.1,
+accepts `-march=rv32imxpulpv2`; the hwlp firmware builds with 19 real
+`lp.*` hardware-loop opcodes — note the Makefile rule keeps the OLD
+march spelling, since the PULP gcc predates the zicsr split).  With the
+XPULP config (`isim-hwlp-run`, `-defparam tb_top.PULP_XPULP=1`),
+**iSim and dsim execute the firmware IDENTICALLY** — same wild
+out-of-bounds read (`006f3d5c`), same time (499290), same SVA counts
+(49929 evaluations / 3473 nonvacuous) — for half a million ns including
+the hardware-loop instructions, until the firmware itself crashes with
+no program output on either simulator.  Per oracle-first, that is an
+upstream firmware/RTL staleness bug (ETH 2020 test vs current RTL), not
+a simulator finding; the differential-identical execution is itself
+strong compliance evidence for the XPULP config.  Not graded (a
+firmware that fails the oracle cannot be a golden).
+
+---
+
 ## Closed items (fixed in iSim, removed from active tracking)
 
 - **DPI-C export unsupported formal types** (was item 1, github#639):

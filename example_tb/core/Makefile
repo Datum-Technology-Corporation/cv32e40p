@@ -307,9 +307,15 @@ interrupt-vsim-run-gui: vsim-run-gui
 # Compile and run HW-loops test
 # Until the compiler will correctly handle HW-loops, manually insert them (no jumps/branch in the body)
 # Compile with "rv32imxpulpv2" with "-mnohwloop" or "-O0" to avoid the compiler inserting other hw-loops
+# NOTE: NO `_zicsr` here (unlike the other firmware rules): xpulpv2 only
+# exists in the PULP gcc 7.1 fork (/tools/pulp-riscv-gcc), which predates
+# the zicsr ISA split -- csr* opcodes are still part of base I there, and
+# the `_zicsr` spelling is a hard error.  This rule can never be built by
+# a modern standard GCC anyway (no xpulpv2 support), so the old spelling
+# is the only correct one.  Build with RISCV=/tools/pulp-riscv-gcc.
 # Do not use RVC, as the instructions should be aligned and not compressed
 hwlp_test/hwlp_test.elf: hwlp_test/hwlp_test.c
-	$(RISCV_EXE_PREFIX)gcc -march=rv32imxpulpv2_zicsr -mnohwloop -o $@ -w -O0 -g -nostdlib \
+	$(RISCV_EXE_PREFIX)gcc -march=rv32imxpulpv2 -mnohwloop -o $@ -w -O0 -g -nostdlib \
 		$(CUSTOM_GCC_FLAGS) \
 		-T custom/link.ld \
 		-static \
