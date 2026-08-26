@@ -5,13 +5,15 @@
 # own variable prefix, its own target family). No separate vlib/vopt
 # step: iSim's own work library covers create+analyse+elaborate in one
 # binary, so this block is shorter than the ModelSim one above by
-# design, not by omission -- and no "-run" target is offered here,
-# because no target in this pile has ever gotten a full core-v-verif
-# style firmware run working against iSim (see the isim.mk sibling in
-# the Datum-Technology-Corporation/core-v-verif fork's mk/uvmt/ for
-# where that frontier actually is). Offering one here that has not been
-# proven working would be exactly the silent-wrong-by-omission shape
-# this project's own iSim CLAUDE.md rules refuse.
+# design, not by omission.
+#
+# isim-run/isim-custom-run below are the first firmware run proven
+# working against iSim for this core -- see ISIM_TASK_LIST.md. This is
+# still the SIMPLE example_tb (tb_top + mm_ram), not core-v-verif's UVM
+# environment (the isim.mk sibling in the
+# Datum-Technology-Corporation/core-v-verif fork's mk/uvmt/, a separate,
+# much larger frontier -- see the project's own rvmcu-vs-core-v-mcu
+# distinction).
 #
 # iSim's `-f` command-file reader does not expand `${VAR}` tokens the
 # way vsim's `-f` does -- a real, filed iSim CLI gap (True North
@@ -23,6 +25,7 @@
 # ----------------------------------------------------------------------
 ISIM_VLOG		?= isim-vlog
 ISIM_ELAB		?= isim-elab
+ISIM			?= isim
 ISIM_WORK		= isim_work
 ISIM_MANIFEST		= .isim_cv32e40p_manifest.f
 ISIM_FPU_MANIFEST	= .isim_cv32e40p_fpu_manifest.f
@@ -82,11 +85,48 @@ isim-analyze-tb: $(ISIM_MANIFEST) | $(ISIM_LOG_DIR)
 		-work $(ISIM_WORK) -lib work -f $(ISIM_MANIFEST) \
 		$(RTLSRC_TB_PKG) $(RTLSRC_TB)
 
-# Elaborate the assembled core as its own top -- no testbench.
+# Elaborate the assembled core as its own top -- no testbench. Useful on
+# its own (isolates a core-only elaboration failure from a testbench-side
+# one) but produces no image that can run: tb_top, not cv32e40p_top, is
+# what owns the clock/reset generators, the memory and the
+# pass/fail/exit signalling -- see isim-elab-tb below.
 .PHONY: isim-elab
 isim-elab: isim-analyze | $(ISIM_LOG_DIR)
 	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab.log \
 		-work $(ISIM_WORK) -lib work -top $(ISIM_TOP) -sir
+
+# Elaborate the FULL testbench (tb_top -> cv32e40p_tb_subsystem ->
+# core + mm_ram/dp_ram) as top. `-sir` writes the native image
+# ($(ISIM_WORK)/a.out.so) that isim-run below loads with `-image`;
+# isim-elab-tb itself does not run it (isim-elab's own -help: "does not
+# write an image" without -sir; WITH -sir it writes one but elaborating
+# is still a separate step from running -- isim -image is what runs).
+.PHONY: isim-elab-tb
+isim-elab-tb: isim-analyze-tb | $(ISIM_LOG_DIR)
+	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab-tb.log \
+		-work $(ISIM_WORK) -lib work -top tb_top -sir
+
+# Run a firmware image against the elaborated testbench. tb_top.sv
+# itself mandates a cycle timeout (mirroring riscv-tests' own
+# convention, see mm_ram.sv's tb_timer comment) via +maxcycles -- without
+# one, a design that never reaches tests_passed/tests_failed/exit_valid
+# hangs forever instead of failing loud. ISIM_FIRMWARE/ISIM_RUN_FLAGS are
+# meant to be set by a caller (see isim-custom-run below for the
+# pattern, matching custom-vsim-run's own ALL_VSIM_FLAGS += idiom).
+ISIM_MAXCYCLES		?= 200000
+ISIM_RUN_FLAGS		?=
+
+.PHONY: isim-run
+isim-run: isim-elab-tb | $(ISIM_LOG_DIR)
+	$(ISIM) -l $(ISIM_LOG_DIR)/isim-run.log \
+		-image $(ISIM_WORK)/a.out.so \
+		+firmware=$(ISIM_FIRMWARE) +maxcycles=$(ISIM_MAXCYCLES) $(ISIM_RUN_FLAGS)
+
+# Run the 'Hello World' firmware -- the iSim analogue of custom-vsim-run.
+.PHONY: isim-custom-run
+isim-custom-run: custom/hello_world.hex
+isim-custom-run: ISIM_FIRMWARE = custom/hello_world.hex
+isim-custom-run: isim-run
 
 .PHONY: isim-clean
 isim-clean:

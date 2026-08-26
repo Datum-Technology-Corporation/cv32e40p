@@ -71,8 +71,14 @@ module cv32e40p_tb_subsystem #(
 
   // instantiate the core
   cv32e40p_top #(
-      .PULP_XPULP      (PULP_XPULP),
-      .PULP_CLUSTER    (PULP_CLUSTER),
+      // NOTE: cv32e40p_top.sv's own parameters are COREV_PULP/COREV_CLUSTER
+      // as of the pinned RTL (renamed upstream from PULP_XPULP/PULP_CLUSTER
+      // after this example_tb glue was last synced) -- this wrapper's OWN
+      // external parameter names are left as PULP_XPULP/PULP_CLUSTER
+      // unchanged, since the Makefile's vsim flags (-GPULP_XPULP=1 etc.)
+      // and tb_top.sv both still refer to them.
+      .COREV_PULP      (PULP_XPULP),
+      .COREV_CLUSTER   (PULP_CLUSTER),
       .FPU             (FPU),
       .FPU_ADDMUL_LAT  (FPU_ADDMUL_LAT),
       .FPU_OTHERS_LAT  (FPU_OTHERS_LAT),

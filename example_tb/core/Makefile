@@ -212,7 +212,7 @@ tb-clean-fp:
 # We link with our custom crt0.s and syscalls.c against newlib so that we can
 # use the c standard library
 custom/hello_world.elf: custom/hello_world.c
-	$(RISCV_EXE_PREFIX)gcc -march=rv32imc -o $@ -w -Os -g -nostdlib \
+	$(RISCV_EXE_PREFIX)gcc -march=rv32imc_zicsr -o $@ -w -Os -g -nostdlib \
 		$(CUSTOM_GCC_FLAGS) \
 		-T custom/link.ld \
 		-static \
@@ -240,7 +240,7 @@ custom-vsim-run-gui: vsim-run-gui
 # We link with our custom crt0.s and syscalls.c against newlib so that we can
 # use the c standard library
 custom_fp/main.elf: custom_fp/matmulNxN.c custom_fp/main.c
-	$(RISCV_EXE_PREFIX)gcc -march=rv32imfc -mabi=ilp32f -o $@ -w -g -nostdlib \
+	$(RISCV_EXE_PREFIX)gcc -march=rv32imfc_zicsr -mabi=ilp32f -o $@ -w -g -nostdlib \
 		$(CUSTOM_GCC_FLAGS) \
 		-T custom/link.ld  \
 		-static \
@@ -265,7 +265,7 @@ custom-fp-vsim-run-gui: vsim-run-gui-fp
 
 # compile and run interrupt
 interrupt/interrupt.elf: interrupt/interrupt.c
-	$(RISCV_EXE_PREFIX)gcc -march=rv32imc -o $@ -w -Os -g -nostdlib \
+	$(RISCV_EXE_PREFIX)gcc -march=rv32imc_zicsr -o $@ -w -Os -g -nostdlib \
 		${CUSTOM_GCC_FLAGS} \
 		-T custom/link.ld  \
 		-static \
@@ -294,7 +294,7 @@ interrupt-vsim-run-gui: vsim-run-gui
 # Compile with "rv32imxpulpv2" with "-mnohwloop" or "-O0" to avoid the compiler inserting other hw-loops
 # Do not use RVC, as the instructions should be aligned and not compressed
 hwlp_test/hwlp_test.elf: hwlp_test/hwlp_test.c
-	$(RISCV_EXE_PREFIX)gcc -march=rv32imxpulpv2 -mnohwloop -o $@ -w -O0 -g -nostdlib \
+	$(RISCV_EXE_PREFIX)gcc -march=rv32imxpulpv2_zicsr -mnohwloop -o $@ -w -O0 -g -nostdlib \
 		$(CUSTOM_GCC_FLAGS) \
 		-T custom/link.ld \
 		-static \

@@ -15,59 +15,70 @@ See `example_tb/core/isim.mk` for the native `make isim-analyze` /
 
 ---
 
-## 1. `Overriding the default variable lifetime is only partially supported outside a fork-statement capture` — recurring SvWarning across FP and testbench sources
+## 1. `riscv_rvalid_stall.sv:156` — structural array-port read has no lowering, core hangs after two fetches
 
-**Status: OPEN**
+**Status: FIXED — SW-514800 (iSim `1f86f7c78`, 2026-08-25). FIRST FULL
+FIRMWARE RUN GREEN: `hello world!` / `EXIT SUCCESS` at time 22820,
+cycle-exact with dsim 2026 (2282 SVA evaluations both). Minor residuals
+noted below.**
 
-**Where observed**: `make isim-analyze-fp` and `make isim-analyze-tb`
-(NOT `make isim-analyze`, the core-RTL-only target — this warning never
-fires there). Fires repeatedly across unrelated files:
-
-- `rtl/vendor/pulp_platform_fpnew/src/fpnew_cast_multi.sv:683`
-- `rtl/vendor/pulp_platform_fpnew/src/fpnew_opgroup_fmt_slice.sv:293`
-- `rtl/vendor/pulp_platform_fpnew/src/fpnew_opgroup_multifmt_slice.sv:513`
-- `example_tb/core/cv32e40p_random_interrupt_generator.sv:131,132`
-- `example_tb/core/mm_ram.sv:249,250,251,252,253`
-- `example_tb/core/tb_top.sv:70,71,114`
-
-Exact message (identical every occurrence, only file:line changes):
+**Where observed**: the first full firmware run (`make isim-run` with
+`hello_world.hex`) hangs at the cycle limit with zero program output,
+while dsim 2026 runs the identical sources+firmware to `hello world!` /
+`EXIT SUCCESS` in 2282 cycles. Traced via `+ifetch_trace`: `instr_req`/
+`instr_gnt` succeed twice (0x180, 0x184) then the pipeline waits forever
+for an `instr_rvalid` that never arrives. Root cause is a build warning
+present in every elaboration log:
 
 ```
-=W:[SvWarning] <file>:<line>: warning: Overriding the default variable
-lifetime is only partially supported outside a fork-statement capture of
-this declaration; other uses still share one storage cell across
-re-entries of this block.
+warning: SIR: structural net driver 'lpm.array' has NO LOWERING
+(array-port read) - the driven net NEVER UPDATES (silent-wrong; first
+site riscv_rvalid_stall.sv:156; tgt_sir.cc:11390).
 ```
 
-**Why this is worth investigating first, not dismissing as noise**:
-"partially supported" outside the one context (fork-statement capture)
-where iSim's own lifetime-override handling is apparently complete is
-exactly the shape of a correctness gap, not a style nit — if a variable
-declared with an overridden (e.g. `automatic` inside a `static` task, or
-vice versa) lifetime is read/written from more than one re-entry of its
-enclosing block OUTSIDE a fork capture, and iSim silently shares one
-storage cell across those re-entries where the LRM requires each entry
-to get its own, that is silent-wrong: a value from a stale prior
-invocation leaking into a new one, with no diagnostic escalation beyond
-a warning. Needs determining:
+`assign current_delay = fifo[rptr[..]][FIFO_DELAY_LSB +: FIFO_DELAY_WL];`
+— a continuous assign reading a part-select of a dynamically-indexed
+unpacked-array word. With `current_delay` permanently X, the rvalid FIFO's
+`!fifo_empty && current_delay == 0` never fires and `rvalid_o` stays 0.
 
-1. Does ANY of the six flagged sites actually re-enter its enclosing
-   block in a way that would expose this (recursion, a task called from
-   more than one concurrent context, a loop-spawned block) — or is the
-   warning firing on a declaration shape that happens to be syntactically
-   eligible but never actually re-entered in practice, making it a true
-   non-issue for this design specifically even if the underlying iSim
-   gap is real?
-2. If a real re-entry case exists here: does iSim actually compute the
-   wrong value (MEASURE it, oracle-first against dsim 2026 per iSim's
-   own CLAUDE.md discipline), or is the warning itself overly broad
-   (correctly conservative, flagging a shape that iSim actually handles
-   correctly today, just without high enough confidence to stay silent)?
-3. Either way, file the finding against iSim with a minimal, oracle-first
-   reduction — not against this fork's own RTL, which is upstream code
-   we do not modify to work around iSim gaps.
+**Fix**: SW-514800 in iSim — real structural lowering for
+`ISIM_LPM_ARRAY` (the dynamic bound-checked SignalRead shape the
+procedural lane already uses), plus a dsim-verified `sv_lrm` pile
+regression pinning this exact FIFO shape
+(`isim_sv_10_03_dynamic_array_word_continuous_assign`). Verified here:
+`make isim-elab-tb` elaborates with `rejected-loud=0`, and
+`make isim-custom-run` completes the hello_world firmware.
 
-**Next step**: reduce to a minimal repro isolating one of the six sites'
-actual declaration/re-entry shape, run it through dsim 2026 first, then
-iSim, and determine which of the three questions above is the answer
-before deciding OPEN → FILED or OPEN → NOT-A-BUG.
+**Minor residuals observed on the green run (neither blocks anything):**
+
+- iSim prints ten time-0 `unique case violation: no item matched`
+  warnings (`cv32e40p_id_stage.sv`, `cv32e40p_load_store_unit.sv`)
+  during reset X-propagation; dsim prints none for the same run. Needs
+  an LRM 12.5 adjudication (is a unique-case with an X selector at
+  time 0 reportable?) before calling either tool wrong.
+- SVA summary accounting differs slightly: iSim 475 nonvacuous passes /
+  4 disables vs dsim 474 / 5 (same 2282 evaluations) — likely a
+  reset-boundary counting difference, unadjudicated.
+
+---
+
+## Closed items (fixed in iSim, removed from active tracking)
+
+- **DPI-C export unsupported formal types** (was item 1, github#639):
+  `read_byte`'s 4-state `logic` input formal fixed as SW-514500;
+  `write_byte`'s output-arg task formals fixed as SW-514600. Both landed
+  on `main` 2026-08-25; `make isim-elab-tb` now elaborates, compiles and
+  links the full testbench image end-to-end (~4 min).
+- **`isim-elab-tb` 20+-minute/10GB clang hang**: the 4.2M-line generated
+  sensitivity function (one wakeup registration per array WORD nexus for
+  `mm_ram.sv:187`'s address decode, collapsing to 13 real kernel signal
+  ids) fixed as SW-514700 (dedup by resolved `(signal_id, edge)`); with
+  SW-514400 (`NexusSet::bsearch_` O(n)→O(1)) landed just before it. The
+  `.ll` dropped 329MB→22.7MB. This also answers the "one entry per array
+  element vs whole-aggregate" architectural question recorded earlier:
+  the per-element NexusSet stays (order-preserving, correct), and the
+  redundancy is removed where it is provably safe — at kernel signal-id
+  resolution.
+- Automatic-lifetime `SvWarning` noise (SW-510000/511000/514300), the
+  packed-struct/`>64-bit` automatic-noinit gap (SW-513000) — earlier
+  session, landed on `main`.
