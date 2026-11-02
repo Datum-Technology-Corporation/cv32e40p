@@ -8,7 +8,7 @@
 # design, not by omission.
 #
 # isim-run/isim-custom-run below are the first firmware run proven
-# working against iSim for this core -- see ISIM_TASK_LIST.md. This is
+# working against iSim for this core. This is
 # still the SIMPLE example_tb (tb_top + mm_ram), not core-v-verif's UVM
 # environment (the isim.mk sibling in the
 # Datum-Technology-Corporation/core-v-verif fork's mk/uvmt/, a separate,
@@ -90,7 +90,7 @@ isim-analyze-tb: $(ISIM_MANIFEST) | $(ISIM_LOG_DIR)
 # filtered TB source set the non-FP target uses -- RTLSRC_TB's own
 # filter-out of the TB-local cv32e40p_fp_wrapper.sv copy is load-bearing
 # here: the manifest already provides that module, and analysing both
-# copies is a duplicate-definition error (measured, dsim [DupModuleDefn]).
+# copies is a duplicate-definition error (measured).
 # This is the VENDORED-fpnew flow (cv32e40p_fpu_manifest.flist), not the
 # older clone-fpnew flow .build-rtl-fp above uses.
 .PHONY: isim-analyze-tb-fp
