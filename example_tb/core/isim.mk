@@ -108,18 +108,16 @@ isim-analyze-tb-fp: $(ISIM_FPU_MANIFEST) | $(ISIM_LOG_DIR)
 .PHONY: isim-elab
 isim-elab: isim-analyze | $(ISIM_LOG_DIR)
 	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab.log \
-		-work $(ISIM_WORK) -lib work -top $(ISIM_TOP) -sir
+		-work $(ISIM_WORK) -lib work -top $(ISIM_TOP)
 
 # Elaborate the FULL testbench (tb_top -> cv32e40p_tb_subsystem ->
-# core + mm_ram/dp_ram) as top. `-sir` writes the native image
+# core + mm_ram/dp_ram) as top. isim-elab writes the native image
 # ($(ISIM_WORK)/a.out.so) that isim-run below loads with `-image`;
-# isim-elab-tb itself does not run it (isim-elab's own -help: "does not
-# write an image" without -sir; WITH -sir it writes one but elaborating
-# is still a separate step from running -- isim -image is what runs).
+# isim-elab-tb itself does not run it -- isim -image is what runs.
 .PHONY: isim-elab-tb
 isim-elab-tb: isim-analyze-tb | $(ISIM_LOG_DIR)
 	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab-tb.log \
-		-work $(ISIM_WORK) -lib work -top tb_top -sir
+		-work $(ISIM_WORK) -lib work -top tb_top
 
 # Run a firmware image against the elaborated testbench. tb_top.sv
 # itself mandates a cycle timeout (mirroring riscv-tests' own
@@ -159,7 +157,7 @@ isim-interrupt-run: isim-run
 isim-elab-tb-pulp: isim-analyze-tb | $(ISIM_LOG_DIR)
 	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab-tb-pulp.log \
 		-work $(ISIM_WORK) -lib work -top tb_top \
-		-defparam tb_top.PULP_XPULP=1 -sir
+		-defparam tb_top.PULP_XPULP=1
 
 # Run the hardware-loop test -- the iSim analogue of hwlp-vsim-run.
 .PHONY: isim-hwlp-run
@@ -174,7 +172,7 @@ isim-hwlp-run: hwlp_test/hwlp_test.hex isim-elab-tb-pulp | $(ISIM_LOG_DIR)
 .PHONY: isim-elab-tb-fp
 isim-elab-tb-fp: isim-analyze-tb-fp | $(ISIM_LOG_DIR)
 	$(ISIM_ELAB) -l $(ISIM_LOG_DIR)/isim-elab-tb-fp.log \
-		-work $(ISIM_WORK) -lib work -top tb_top -defparam tb_top.FPU=1 -sir
+		-work $(ISIM_WORK) -lib work -top tb_top -defparam tb_top.FPU=1
 
 # Run the FP matmul test -- the iSim analogue of custom-fp-vsim-run.
 # Depends on the FP elab, not the plain one: the image must carry fpnew.
